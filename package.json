@@ -1,0 +1,26 @@
+{
+  "name": "x-pilot-e2b-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@e2b/code-interpreter": "^2.3.3",
+    "@fastify/cors": "*",
+    "@fastify/multipart": "*",
+    "dotenv": "*",
+    "e2b": "*",
+    "fastify": "*",
+    "nanoid": "*",
+    "zod": "*"
+  },
+  "devDependencies": {
+    "@types/node": "*",
+    "tsx": "*",
+    "typescript": "*"
+  }
+}
