@@ -42,16 +42,16 @@ export class E2BSandboxClient {
 
     try {
       // e2b SDK（新签名）：Sandbox.create(templateNameOrId, { apiKey, requestTimeoutMs })
-      sandbox = await withTimeout(
-        (Sandbox as any).create(input.template, { apiKey: this.apiKey, requestTimeoutMs: 60_000 }),
+      sandbox = await withTimeout<Sandbox>(
+        (Sandbox as any).create(input.template, { apiKey: this.apiKey, requestTimeoutMs: 60_000 }) as Promise<Sandbox>,
         65_000,
         'Sandbox.create(template, opts) timed out',
       )
     } catch (err) {
       firstErr = err
       // 兼容极少数旧签名/包装层：Sandbox.create({ template, apiKey, requestTimeoutMs })
-      sandbox = await withTimeout(
-        (Sandbox as any).create({ template: input.template, apiKey: this.apiKey, requestTimeoutMs: 60_000 }),
+      sandbox = await withTimeout<Sandbox>(
+        (Sandbox as any).create({ template: input.template, apiKey: this.apiKey, requestTimeoutMs: 60_000 }) as Promise<Sandbox>,
         65_000,
         'Sandbox.create({template,...}) timed out',
       ).catch(() => {

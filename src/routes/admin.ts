@@ -65,14 +65,14 @@ const html = String.raw`<!doctype html>
           <div>
             <label>waitForReady</label>
             <select id="waitForReady">
-              <option value="true" selected>true</option>
-              <option value="false">false</option>
+              <option value="true">true</option>
+              <option value="false" selected>false</option>
             </select>
           </div>
         </div>
 
         <div style="margin-top:10px" class="actions">
-          <button id="btnRun">推送并启动预览</button>
+          <button id="btnRun">推送并启动预览（返回 previewUrl）</button>
           <button id="btnFmt" class="secondary">格式化 JSON</button>
           <span id="status" class="hint"></span>
         </div>
@@ -246,7 +246,7 @@ const html = String.raw`<!doctype html>
   // 默认示例：Dify 原始 scenes（string[]）
   $('scenes').value = JSON.stringify({
     scenes: [
-      "// @scene 预览验证\n// @duration 90\nimport React from 'react';\nimport { AbsoluteFill } from 'remotion';\n\nexport default function PreviewSmokeScene() {\n  return (\n    <AbsoluteFill style={{ backgroundColor: '#0b1020', color: 'white', justifyContent: 'center', alignItems: 'center', fontSize: 56 }}\n    >x-pilot-e2b-server admin preview OK</AbsoluteFill>\n  );\n}\n"
+      "// @scene 预览验证\n// @duration 90\nimport React from 'react';\nimport { AbsoluteFill } from 'remotion';\n\nexport default function ScenePreviewSmoke() {\n  return (\n    <AbsoluteFill style={{ backgroundColor: '#0b1020', color: 'white', justifyContent: 'center', alignItems: 'center', fontSize: 56 }}\n    >x-pilot-e2b-server admin preview OK</AbsoluteFill>\n  );\n}\n"
     ]
   }, null, 2)
 
