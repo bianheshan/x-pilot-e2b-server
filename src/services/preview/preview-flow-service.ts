@@ -97,7 +97,53 @@ export class PreviewFlowService {
     await runWithRetries(
       () =>
         s.commands.run(
-          `bash -lc "set -euo pipefail; mkdir -p ${root}; rm -rf ${projectDir}; mkdir -p ${projectDir}; BASE_DIR=''; for d in '${env.BASE_PROJECT_DIR}' /app /code /home/user /home/user/app /home/user/code /workspace; do if [ -d \"$d\" ] && ( [ -f \"$d/package.json\" ] || [ -f \"$d/remotion.config.ts\" ] ); then BASE_DIR=\"$d\"; break; fi; done; if [ -z \"$BASE_DIR\" ]; then echo 'BASE_PROJECT_DIR not found (auto-detect failed). Tried: ${env.BASE_PROJECT_DIR}, /app, /code, /home/user, /home/user/app, /home/user/code, /workspace' >&2; echo 'Tip: set TEMPLATE_NAME/TEMPLATE_ID to your built template and/or set BASE_PROJECT_DIR to the correct path inside the sandbox.' >&2; echo '--- ls -la / ---' >&2; ls -la / >&2 || true; echo '--- ls -la /home/user ---' >&2; ls -la /home/user >&2 || true; echo '--- ls -la /code ---' >&2; ls -la /code >&2 || true; exit 1; fi; cp -R \"$BASE_DIR\"/. ${projectDir}/"`,
+          `bash -lc 'set -euo pipefail
+mkdir -p ${root}
+rm -rf ${projectDir}
+mkdir -p ${projectDir}
+
+detect_dir() {
+  local d="$1"
+  if [ ! -d "$d" ]; then return 1; fi
+  if [ -f "$d/package.json" ] || [ -f "$d/remotion.config.ts" ]; then
+    echo "$d"
+    return 0
+  fi
+
+  local f
+  f=$(find "$d" -maxdepth 4 -type f -name package.json -print -quit 2>/dev/null || true)
+  if [ -z "$f" ]; then
+    f=$(find "$d" -maxdepth 4 -type f -name remotion.config.ts -print -quit 2>/dev/null || true)
+  fi
+  if [ -n "$f" ]; then
+    dirname "$f"
+    return 0
+  fi
+  return 1
+}
+
+BASE_DIR=""
+for d in "${env.BASE_PROJECT_DIR}" /app /code /home/user /home/user/app /home/user/code /workspace; do
+  if out=$(detect_dir "$d"); then
+    BASE_DIR="$out"
+    break
+  fi
+done
+
+if [ -z "$BASE_DIR" ]; then
+  echo "BASE_PROJECT_DIR not found (auto-detect failed). Tried: ${env.BASE_PROJECT_DIR}, /app, /code, /home/user, /home/user/app, /home/user/code, /workspace" >&2
+  echo "Tip: set TEMPLATE_NAME/TEMPLATE_ID to your built template and/or set BASE_PROJECT_DIR to the correct path inside the sandbox." >&2
+  echo "--- ls -la / ---" >&2; ls -la / >&2 || true
+  echo "--- ls -la /app ---" >&2; ls -la /app >&2 || true
+  echo "--- find /app (depth<=4) ---" >&2
+  find /app -maxdepth 4 -type f -name package.json 2>/dev/null >&2 || true
+  find /app -maxdepth 4 -type f -name remotion.config.ts 2>/dev/null >&2 || true
+  echo "--- ls -la /home/user ---" >&2; ls -la /home/user >&2 || true
+  echo "--- ls -la /code ---" >&2; ls -la /code >&2 || true
+  exit 1
+fi
+
+cp -R "$BASE_DIR"/. ${projectDir}/'`,
         ),
       { attempts: 5, baseDelayMs: 800 },
     )
