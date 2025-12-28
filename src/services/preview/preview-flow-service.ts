@@ -195,8 +195,9 @@ cp -R "$BASE_DIR"/. ${projectDir}/'`,
 
       if (req.waitForReady) {
         await s.commands.run(
-          `bash -lc "for i in $(seq 1 30); do curl -fsS http://localhost:${env.STUDIO_PORT}/ >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1"`,
+          `bash -lc "for i in $(seq 1 30); do curl -fsS --max-time 1 http://localhost:${env.STUDIO_PORT}/ >/dev/null && exit 0; sleep 1; done; exit 1"`,
         )
+
       }
     }
 
