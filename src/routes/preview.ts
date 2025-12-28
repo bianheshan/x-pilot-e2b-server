@@ -15,8 +15,27 @@ export async function previewRoutes(app: FastifyInstance) {
   const flow = new PreviewFlowService(sandboxService)
 
   app.post('/preview', async (req, reply) => {
-    const body = previewRequestSchema.parse(req.body ?? {})
-    const result = await flow.createPreview(body)
-    return reply.code(201).send(result)
+    const reqId = (req as any).id
+    app.log.info({ reqId }, 'preview: request received')
+
+    try {
+      const body = previewRequestSchema.parse(req.body ?? {})
+      app.log.info(
+        {
+          reqId,
+          startDev: body.startDev,
+          waitForReady: body.waitForReady,
+          scenesCount: Array.isArray(body.scenes) ? body.scenes.length : 0,
+        },
+        'preview: parsed body',
+      )
+
+      const result = await flow.createPreview(body)
+      app.log.info({ reqId, sandboxId: result.sandboxId, jobId: result.jobId }, 'preview: completed')
+      return reply.code(201).send(result)
+    } catch (err) {
+      app.log.error({ reqId, err }, 'preview: failed')
+      throw err
+    }
   })
 }

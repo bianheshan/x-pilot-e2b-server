@@ -23,17 +23,41 @@ export class E2BSandboxClient {
       throw new Error('E2B_API_KEY is required')
     }
 
-    let sandbox: Sandbox
-    try {
-      // e2b SDK：Sandbox.create(templateNameOrId, { apiKey })
-      sandbox = await (Sandbox as any).create(input.template, { apiKey: this.apiKey, requestTimeoutMs: 60_000 })
-
-    } catch {
-      // 兼容极少数旧签名/包装层
-      sandbox = await (Sandbox as any).create({ template: input.template, apiKey: this.apiKey })
+    const withTimeout = async <T>(p: Promise<T>, ms: number, msg: string): Promise<T> => {
+      let t: NodeJS.Timeout | undefined
+      try {
+        return await Promise.race([
+          p,
+          new Promise<T>((_, reject) => {
+            t = setTimeout(() => reject(new Error(msg)), ms)
+          }),
+        ])
+      } finally {
+        if (t) clearTimeout(t)
+      }
     }
 
+    let sandbox: Sandbox
+    let firstErr: unknown
 
+    try {
+      // e2b SDK（新签名）：Sandbox.create(templateNameOrId, { apiKey, requestTimeoutMs })
+      sandbox = await withTimeout(
+        (Sandbox as any).create(input.template, { apiKey: this.apiKey, requestTimeoutMs: 60_000 }),
+        65_000,
+        'Sandbox.create(template, opts) timed out',
+      )
+    } catch (err) {
+      firstErr = err
+      // 兼容极少数旧签名/包装层：Sandbox.create({ template, apiKey, requestTimeoutMs })
+      sandbox = await withTimeout(
+        (Sandbox as any).create({ template: input.template, apiKey: this.apiKey, requestTimeoutMs: 60_000 }),
+        65_000,
+        'Sandbox.create({template,...}) timed out',
+      ).catch(() => {
+        throw firstErr
+      })
+    }
 
     this.sandboxes.set(sandbox.sandboxId, sandbox)
     return sandbox

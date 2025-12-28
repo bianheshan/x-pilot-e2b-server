@@ -6,6 +6,7 @@ export type AllocateSandboxInput = {
   userId?: string
   templateId?: string
   templateName?: string
+  studioPort?: number
 }
 
 export type AllocateSandboxResult = {
@@ -35,12 +36,43 @@ export class SandboxService {
 
   async allocate(input: AllocateSandboxInput): Promise<AllocateSandboxResult> {
     const template = input.templateId ?? this.templateId ?? input.templateName ?? this.templateName
+    const studioPort = input.studioPort ?? this.studioPort
+
     const sandbox = await this.e2b.createSandbox({ template })
     const sandboxId = sandbox.sandboxId
 
+    const s: any = sandbox
+
+    // Prefer official SDK helpers to build public URL (latest docs), but keep backwards-compatible fallback.
+    let previewUrl: string | undefined
+
+    try {
+      if (typeof s.getPublicUrlForPort === 'function') {
+        previewUrl = await s.getPublicUrlForPort(studioPort)
+      }
+    } catch {
+      // ignore
+    }
+
+    if (!previewUrl) {
+      try {
+        if (typeof s.getHost === 'function') {
+          const hostOrPromise = s.getHost(studioPort)
+          const host = typeof hostOrPromise?.then === 'function' ? await hostOrPromise : hostOrPromise
+          if (host) previewUrl = `https://${host}`
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!previewUrl) {
+      previewUrl = `https://${studioPort}-${sandboxId}.e2b.app`
+    }
+
     return {
       sandboxId,
-      previewUrl: `https://${this.studioPort}-${sandboxId}.e2b.app`,
+      previewUrl,
     }
   }
 
