@@ -42,6 +42,23 @@ function detectScenesDir(inputAbsDir: string): { projectDir: string; scenesDir: 
   return { projectDir: inputAbsDir, scenesDir, baseIsScenesDir }
 }
 
+function maybeUnescapeCode(input: string): string {
+  const s = String(input ?? '')
+
+  // If it already contains real newlines, keep as-is.
+  if (s.includes('\n') || s.includes('\r')) return s
+
+  // Only attempt unescape when it looks like a double-escaped string.
+  if (!s.includes('\\')) return s
+
+  return s
+    .replaceAll('\\r\\n', '\n')
+    .replaceAll('\\n', '\n')
+    .replaceAll('\\r', '\n')
+    .replaceAll('\\t', '\t')
+}
+
+
 async function clearScenesInDir(scenesDir: string) {
 
   try {
@@ -86,9 +103,13 @@ export async function localPushRoutes(app: FastifyInstance) {
       throw new Error('scenes 输入必须是纯 string[]（Dify）或纯 {filePath,code}[]（文件写入）')
     }
 
-    const fileWrites = isDify
+    const fileWritesRaw = isDify
       ? buildFromDifyScenes({ scenes: scenes as string[] }).files
       : (scenes as Array<{ filePath: string; code: string }>)
+
+
+    const fileWrites = fileWritesRaw.map((f) => ({ ...f, code: maybeUnescapeCode(f.code) }))
+
 
     if (isDify && body.clearScenes) {
       await clearScenesInDir(scenesDir)

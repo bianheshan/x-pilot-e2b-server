@@ -403,15 +403,15 @@ const html = String.raw`<!doctype html>
   function setPreset(name) {
     const difySmoke = {
       scenes: [
-        "// @scene 预览验证\\n// @duration 90\\nimport React from 'react';\\nimport { AbsoluteFill } from 'remotion';\\n\\nexport default function ScenePreviewSmoke() {\\n  return (\\n    <AbsoluteFill style={{ backgroundColor: '#0b1020', color: 'white', justifyContent: 'center', alignItems: 'center', fontSize: 56, fontWeight: 800 }}\\n    >local push OK</AbsoluteFill>\\n  );\\n}\\n",
+        "// @scene 预览验证\n// @duration 90\nimport React from 'react';\nimport { AbsoluteFill } from 'remotion';\n\nexport default function ScenePreviewSmoke() {\n  return (\n    <AbsoluteFill style={{ backgroundColor: '#0b1020', color: 'white', justifyContent: 'center', alignItems: 'center', fontSize: 56, fontWeight: 800 }}\n    >local push OK</AbsoluteFill>\n  );\n}\n",
       ],
     }
 
     const difyMulti = {
       scenes: [
-        "// @scene 标题页\\n// @duration 60\\nimport React from 'react';\\nimport { AbsoluteFill } from 'remotion';\\n\\nexport default function SceneTitle() {\\n  return (\\n    <AbsoluteFill style={{ backgroundColor: '#0b1020', color: 'white', justifyContent: 'center', alignItems: 'center' }}>\\n      <div style={{ textAlign: 'center' }}>\\n        <div style={{ fontSize: 62, fontWeight: 900, letterSpacing: 0.4 }}>Local Push</div>\\n        <div style={{ marginTop: 14, fontSize: 22, opacity: 0.75 }}>Dify scenes（string[]）</div>\\n      </div>\\n    </AbsoluteFill>\\n  );\\n}\\n",
-        "// @scene 内容页\\n// @duration 120\\nimport React from 'react';\\nimport { AbsoluteFill, useCurrentFrame, interpolate } from 'remotion';\\n\\nexport default function SceneBody() {\\n  const f = useCurrentFrame();\\n  const y = interpolate(f, [0, 25], [16, 0], { extrapolateRight: 'clamp' });\\n  const o = interpolate(f, [0, 20], [0, 1], { extrapolateRight: 'clamp' });\\n  return (\\n    <AbsoluteFill style={{ backgroundColor: '#111827', color: 'white', justifyContent: 'center', alignItems: 'center' }}>\\n      <div style={{ transform: 'translateY(' + y + 'px)', opacity: o, textAlign: 'center' }}>\\n        <div style={{ fontSize: 36, fontWeight: 800 }}>写入成功</div>\\n        <div style={{ marginTop: 10, fontSize: 18, opacity: 0.8 }}>请在服务器上运行 Remotion Studio 预览</div>\\n      </div>\\n    </AbsoluteFill>\\n  );\\n}\\n",
-        "// @scene 尾页\\n// @duration 60\\nimport React from 'react';\\nimport { AbsoluteFill } from 'remotion';\\n\\nexport default function SceneOutro() {\\n  return (\\n    <AbsoluteFill style={{ backgroundColor: '#0b1020', color: 'white', justifyContent: 'center', alignItems: 'center' }}>\\n      <div style={{ fontSize: 34, opacity: 0.9 }}>Local Push Done</div>\\n    </AbsoluteFill>\\n  );\\n}\\n",
+        "// @scene 标题页\n// @duration 60\nimport React from 'react';\nimport { AbsoluteFill } from 'remotion';\n\nexport default function SceneTitle() {\n  return (\n    <AbsoluteFill style={{ backgroundColor: '#0b1020', color: 'white', justifyContent: 'center', alignItems: 'center' }}>\n      <div style={{ textAlign: 'center' }}>\n        <div style={{ fontSize: 62, fontWeight: 900, letterSpacing: 0.4 }}>Local Push</div>\n        <div style={{ marginTop: 14, fontSize: 22, opacity: 0.75 }}>Dify scenes（string[]）</div>\n      </div>\n    </AbsoluteFill>\n  );\n}\n",
+        "// @scene 内容页\n// @duration 120\nimport React from 'react';\nimport { AbsoluteFill, useCurrentFrame, interpolate } from 'remotion';\n\nexport default function SceneBody() {\n  const f = useCurrentFrame();\n  const y = interpolate(f, [0, 25], [16, 0], { extrapolateRight: 'clamp' });\n  const o = interpolate(f, [0, 20], [0, 1], { extrapolateRight: 'clamp' });\n  return (\n    <AbsoluteFill style={{ backgroundColor: '#111827', color: 'white', justifyContent: 'center', alignItems: 'center' }}>\n      <div style={{ transform: 'translateY(' + y + 'px)', opacity: o, textAlign: 'center' }}>\n        <div style={{ fontSize: 36, fontWeight: 800 }}>写入成功</div>\n        <div style={{ marginTop: 10, fontSize: 18, opacity: 0.8 }}>请在服务器上运行 Remotion Studio 预览</div>\n      </div>\n    </AbsoluteFill>\n  );\n}\n",
+        "// @scene 尾页\n// @duration 60\nimport React from 'react';\nimport { AbsoluteFill } from 'remotion';\n\nexport default function SceneOutro() {\n  return (\n    <AbsoluteFill style={{ backgroundColor: '#0b1020', color: 'white', justifyContent: 'center', alignItems: 'center' }}>\n      <div style={{ fontSize: 34, opacity: 0.9 }}>Local Push Done</div>\n    </AbsoluteFill>\n  );\n}\n",
       ],
     }
 
@@ -430,13 +430,14 @@ const html = String.raw`<!doctype html>
       {
         filePath: 'src/scenes/scene_preview_smoke.tsx',
         code:
-          "// @scene 预览验证\\n// @duration 90\\nimport React from 'react';\\nimport { AbsoluteFill } from 'remotion';\\n\\nexport default function ScenePreviewSmoke() {\\n  return (\\n    <AbsoluteFill style={{ backgroundColor: '#0b1020', color: 'white', justifyContent: 'center', alignItems: 'center', fontSize: 52, fontWeight: 800 }}\\n    >files[] write OK</AbsoluteFill>\\n  );\\n}\\n" ,
+          "// @scene 预览验证\n// @duration 90\nimport React from 'react';\nimport { AbsoluteFill } from 'remotion';\n\nexport default function ScenePreviewSmoke() {\n  return (\n    <AbsoluteFill style={{ backgroundColor: '#0b1020', color: 'white', justifyContent: 'center', alignItems: 'center', fontSize: 52, fontWeight: 800 }}\n    >files[] write OK</AbsoluteFill>\n  );\n}\n" ,
       },
       {
         filePath: 'src/scenes/manifest.json',
-        code: JSON.stringify(manifest, null, 2) + '\\n',
+        code: JSON.stringify(manifest, null, 2) + '\n',
       },
     ]
+
 
     if (name === 'dify_multi') {
       els.scenes.value = JSON.stringify(difyMulti, null, 2)
