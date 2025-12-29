@@ -124,14 +124,28 @@ const html = String.raw`<!doctype html>
             </div>
           </div>
 
+          <div class="row" style="margin-top:10px">
+            <div>
+              <label>目标环境快捷填充</label>
+              <select id="targetPreset">
+                <option value="local_mac" selected>本机（localhost + mac 路径）</option>
+                <option value="lan_windows">局域网 Windows（192.168.50.186 + C:\\...）</option>
+              </select>
+            </div>
+            <div>
+              <label>说明</label>
+              <div class="muted2" style="font-size:12px; line-height:1.4">可先选预设再手动微调下方两项</div>
+            </div>
+          </div>
+
           <div style="margin-top:10px">
             <label>目标服务器 Base URL（可选，不填默认当前页面 origin）</label>
-            <input id="targetBase" placeholder="http://192.168.50.186:8080" />
+            <input id="targetBase" placeholder="http://localhost:8080" />
           </div>
 
           <div style="margin-top:10px">
             <label>projectDir（可选，服务器本机绝对路径：可填项目根目录或直接填 src/scenes 目录；不填用服务端默认 env.LOCAL_PROJECT_DIR）</label>
-            <input id="projectDir" placeholder="C:\\Users\\bianh\\x-pilot-video-render\\src\\scenes" />
+            <input id="projectDir" placeholder="/Users/bianheshan/code/x-pilot-video-render/src/scenes" />
           </div>
 
           <div style="margin-top:10px" class="actions">
@@ -171,6 +185,7 @@ const html = String.raw`<!doctype html>
   const els = {
     preset: $('preset'),
     clearScenes: $('clearScenes'),
+    targetPreset: $('targetPreset'),
     targetBase: $('targetBase'),
     projectDir: $('projectDir'),
     scenes: $('scenes'),
@@ -180,6 +195,24 @@ const html = String.raw`<!doctype html>
     btnReset: $('btnReset'),
     result: $('result'),
     curl: $('curl'),
+  }
+
+  const targetPresets = {
+    local_mac: {
+      targetBase: 'http://localhost:8080',
+      projectDir: '/Users/bianheshan/code/x-pilot-video-render/src/scenes',
+    },
+    lan_windows: {
+      targetBase: 'http://192.168.50.186:8080',
+      projectDir: 'C:\\Users\\bianh\\x-pilot-video-render\\src\\scenes',
+    },
+  }
+
+  function applyTargetPreset() {
+    const key = els.targetPreset && els.targetPreset.value ? els.targetPreset.value : 'local_mac'
+    const p = targetPresets[key] || targetPresets.local_mac
+    els.targetBase.value = p.targetBase
+    els.projectDir.value = p.projectDir
   }
 
   function now() {
@@ -476,8 +509,10 @@ const html = String.raw`<!doctype html>
   }
 
   function resetDefaults() {
-    els.targetBase.value = 'http://192.168.50.186:8080'
-    els.projectDir.value = 'C:\\Users\\bianh\\x-pilot-video-render\\src\\scenes'
+    if (els.targetPreset) {
+      els.targetPreset.value = 'local_mac'
+    }
+    applyTargetPreset()
     els.clearScenes.value = 'true'
     els.preset.value = 'dify_smoke'
     setPreset('dify_smoke')
@@ -490,6 +525,13 @@ const html = String.raw`<!doctype html>
     setPreset(els.preset.value)
     setStatus('已切换预置', 'ok')
   })
+
+  if (els.targetPreset) {
+    els.targetPreset.addEventListener('change', () => {
+      applyTargetPreset()
+      setStatus('已应用目标环境', 'ok')
+    })
+  }
 
   els.btnFmt.addEventListener('click', () => {
     try {
