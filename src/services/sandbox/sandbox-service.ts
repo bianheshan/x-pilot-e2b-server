@@ -27,6 +27,10 @@ export class SandboxService {
   private readonly templateName: string
   private readonly studioPort: number
 
+  // admin 测试用途：同一个 token（复用 key）复用同一个 sandbox，减少重复启动。
+  // 注意：这是进程内内存缓存，服务重启后会丢。
+  private readonly reuseIndex = new Map<string, { sandboxId: string; lastUsedAt: number }>()
+
   constructor(opts: SandboxServiceOptions) {
     this.e2b = new E2BSandboxClient({ apiKey: opts.e2bApiKey })
     this.templateId = opts.templateId
@@ -34,40 +38,71 @@ export class SandboxService {
     this.studioPort = opts.studioPort
   }
 
-  async allocate(input: AllocateSandboxInput): Promise<AllocateSandboxResult> {
-    const template = input.templateId ?? this.templateId ?? input.templateName ?? this.templateName
-    const studioPort = input.studioPort ?? this.studioPort
+  private makeReuseKey(input: { userId?: string; template: string; studioPort: number }) {
+    const u = (input.userId || '').trim()
+    if (!u) return null
+    return `${input.template}::${input.studioPort}::${u}`
+  }
 
-    const sandbox = await this.e2b.createSandbox({ template })
-    const sandboxId = sandbox.sandboxId
-
-    const s: any = sandbox
-
-    // Prefer official SDK helpers to build public URL (latest docs), but keep backwards-compatible fallback.
-    let previewUrl: string | undefined
-
+  private async getPreviewUrlForSandbox(sandbox: any, studioPort: number, sandboxId: string): Promise<string> {
     try {
-      if (typeof s.getPublicUrlForPort === 'function') {
-        previewUrl = await s.getPublicUrlForPort(studioPort)
+      if (typeof sandbox.getPublicUrlForPort === 'function') {
+        const url = await sandbox.getPublicUrlForPort(studioPort)
+        if (url) return url
       }
     } catch {
       // ignore
     }
 
-    if (!previewUrl) {
-      try {
-        if (typeof s.getHost === 'function') {
-          const hostOrPromise = s.getHost(studioPort)
-          const host = typeof hostOrPromise?.then === 'function' ? await hostOrPromise : hostOrPromise
-          if (host) previewUrl = `https://${host}`
+    try {
+      if (typeof sandbox.getHost === 'function') {
+        const hostOrPromise = sandbox.getHost(studioPort)
+        const host = typeof hostOrPromise?.then === 'function' ? await hostOrPromise : hostOrPromise
+        if (host) return `https://${host}`
+      }
+    } catch {
+      // ignore
+    }
+
+    return `https://${studioPort}-${sandboxId}.e2b.app`
+  }
+
+  async allocate(input: AllocateSandboxInput): Promise<AllocateSandboxResult> {
+    const template = input.templateId ?? this.templateId ?? input.templateName ?? this.templateName
+    const studioPort = input.studioPort ?? this.studioPort
+
+    const reuseKey = this.makeReuseKey({ userId: input.userId, template, studioPort })
+    if (reuseKey) {
+      const existing = this.reuseIndex.get(reuseKey)
+      if (existing) {
+        const sandbox = this.e2b.getSandbox(existing.sandboxId)
+        if (sandbox) {
+          const s: any = sandbox
+          // best-effort 检查是否还活着；不行就走新建
+          try {
+            if (s.commands && typeof s.commands.run === 'function') {
+              await s.commands.run(`bash -lc "echo ping"`)
+            }
+            const previewUrl = await this.getPreviewUrlForSandbox(s, studioPort, existing.sandboxId)
+            existing.lastUsedAt = Date.now()
+            return { sandboxId: existing.sandboxId, previewUrl }
+          } catch {
+            // ignore and recreate
+          }
         }
-      } catch {
-        // ignore
+
+        this.reuseIndex.delete(reuseKey)
       }
     }
 
-    if (!previewUrl) {
-      previewUrl = `https://${studioPort}-${sandboxId}.e2b.app`
+    const sandbox = await this.e2b.createSandbox({ template })
+    const sandboxId = sandbox.sandboxId
+
+    const s: any = sandbox
+    const previewUrl = await this.getPreviewUrlForSandbox(s, studioPort, sandboxId)
+
+    if (reuseKey) {
+      this.reuseIndex.set(reuseKey, { sandboxId, lastUsedAt: Date.now() })
     }
 
     return {

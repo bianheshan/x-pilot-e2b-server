@@ -9,11 +9,14 @@ import { renderRoutes } from './renders.js'
 import { logsRoutes } from './logs.js'
 import { previewRoutes } from './preview.js'
 import { adminRoutes } from './admin.js'
+import { localAdminRoutes } from './local-admin.js'
+import { localPushRoutes } from './local-push.js'
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(healthRoutes, { prefix: '/health' })
 
   await app.register(adminRoutes)
+  await app.register(localAdminRoutes)
 
   await app.register(sandboxRoutes, { prefix: '/api/sandboxes' })
   await app.register(filesRoutes, { prefix: '/api' })
@@ -22,6 +25,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(renderRoutes, { prefix: '/api' })
   await app.register(logsRoutes, { prefix: '/api' })
   await app.register(previewRoutes, { prefix: '/api' })
+  await app.register(localPushRoutes, { prefix: '/api' })
 }
 
 

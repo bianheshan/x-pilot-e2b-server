@@ -35,6 +35,22 @@ export type PreviewResponse = {
   jobId: string
   previewUrl: string
   projectDir: string
+
+  // debug（给 admin 用）：用于判断 previewUrl 是否可达
+  devServerReachable?: boolean
+  devServerStatus?: number
+  devServerError?: string
+
+  // debug：进一步判断前端 bundle 是否可达（避免“/ 200 但页面白屏/空白”）
+  devBundleReachable?: boolean
+  devBundleStatus?: number
+
+  // debug：从 sandbox 内部探测 dev server（排除“容器内 3000 没起来” vs “公网路由/浏览器侧问题”）
+  localDevServerReachable?: boolean
+  localDevServerStatus?: number
+  localDevServerError?: string
+  localDevBundleReachable?: boolean
+  localDevBundleStatus?: number
 }
 
 function sanitizeRelativePosixPath(input: string): string {
@@ -174,30 +190,119 @@ export class PreviewFlowService {
       await Promise.all(batch.map((w) => s.files.write(w.remotePath, w.code)))
     }
 
+    let devServerReachable: boolean | undefined
+    let devServerStatus: number | undefined
+    let devServerError: string | undefined
+    let devBundleReachable: boolean | undefined
+    let devBundleStatus: number | undefined
+
+    let localDevServerReachable: boolean | undefined
+    let localDevServerStatus: number | undefined
+    let localDevServerError: string | undefined
+    let localDevBundleReachable: boolean | undefined
+    let localDevBundleStatus: number | undefined
+
+    const getStdout = (r: any) => {
+      if (typeof r === 'string') return r
+      return String(r?.stdout ?? '')
+    }
+
+    const pingLocalDev = async (path: string, timeoutMs: number) => {
+      const timeoutSec = Math.max(1, Math.ceil(timeoutMs / 1000))
+      const url = `http://127.0.0.1:${port}${path}`
+      const cmd =
+        `bash -lc 'URL="${url}"; ` +
+        `if command -v curl >/dev/null 2>&1; then ` +
+        `curl -sS --max-time ${timeoutSec} -o /dev/null -w "%{http_code}" "$URL" || echo "ERR"; ` +
+        `else ` +
+        `URL="$URL" node -e "const c=new AbortController(); setTimeout(()=>c.abort(), ${timeoutSec}000); fetch(process.env.URL,{signal:c.signal}).then(r=>process.stdout.write(String(r.status))).catch(e=>process.stdout.write(\"ERR:\"+(e?.message||String(e))));"; ` +
+        `fi'`
+
+      try {
+        const r = await s.commands.run(cmd)
+        const out = getStdout(r).trim()
+        if (out.startsWith('ERR:') || out === 'ERR' || out === '') {
+          return { ok: false, status: undefined as unknown as number, error: out || 'ERR' }
+        }
+        const status = Number.parseInt(out, 10)
+        return { ok: Number.isFinite(status) && status >= 200 && status < 400, status }
+      } catch (e: any) {
+        return { ok: false, status: undefined as unknown as number, error: String(e?.message ?? e) }
+      }
+    }
+
+    const pingPreviewUrl = async (url: string, path: string, timeoutMs: number) => {
+      const baseUrl = url.replace(/\/+$/, '')
+      const controller = new AbortController()
+      const t = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const res = await fetch(`${baseUrl}${path}`, { signal: controller.signal })
+        return { ok: res.ok, status: res.status as number }
+      } catch (e: any) {
+        return { ok: false, status: undefined as unknown as number, error: String(e?.message ?? e) }
+      } finally {
+        clearTimeout(t)
+      }
+    }
+
     if (req.startDev) {
       await ensurePortExposed()
 
       // 模板在 sandbox 启动时已通过 start cmd 启动 dev server（通常为 3000）。
       // 这里不重复启动，避免端口冲突/多进程带来的不确定性。
 
+      // 先探测 sandbox 内部 3000（排除“容器内根本没起来”）
+      const localRoot = await pingLocalDev('/', 8_000)
+      localDevServerReachable = localRoot.ok
+      localDevServerStatus = localRoot.status
+      localDevServerError = (localRoot as any).error
+
+      const localBundle = await pingLocalDev('/bundle.js', 8_000)
+      localDevBundleReachable = localBundle.ok
+      localDevBundleStatus = localBundle.status
+
+      // 再探测公网 previewUrl（排除“路由/边缘层/浏览器侧连接问题”）
+      const first = await pingPreviewUrl(allocated.previewUrl, '/', 12_000)
+      devServerReachable = first.ok
+      devServerStatus = first.status
+      devServerError = (first as any).error
+
+      const bundle = await pingPreviewUrl(allocated.previewUrl, '/bundle.js', 12_000)
+      devBundleReachable = bundle.ok
+      devBundleStatus = bundle.status
+
+      // 有时 / 会在编译/重载窗口期超时，但 bundle 已经可用。
+      // 这种情况下不应判定为不可达。
+      if (devServerReachable === false && devBundleReachable === true) {
+        devServerReachable = true
+      }
+
       // best-effort: do not fail the request if the public URL is slow to become ready
-      if (req.waitForReady) {
-        const baseUrl = allocated.previewUrl.replace(/\/+$/, '')
+      if (req.waitForReady && !devServerReachable) {
         const maxAttempts = 60
 
         for (let i = 1; i <= maxAttempts; i++) {
-          try {
-            const controller = new AbortController()
-            const t = setTimeout(() => controller.abort(), 10_000)
-            const res = await fetch(`${baseUrl}/`, { signal: controller.signal })
-            clearTimeout(t)
-
-            if (res.ok) break
-          } catch {
-            // ignore
-          }
-
           await sleep(1000)
+
+          const lr = await pingLocalDev('/', 8_000)
+          localDevServerReachable = lr.ok
+          localDevServerStatus = lr.status
+          localDevServerError = (lr as any).error
+
+          const lb = await pingLocalDev('/bundle.js', 8_000)
+          localDevBundleReachable = lb.ok
+          localDevBundleStatus = lb.status
+
+          const r = await pingPreviewUrl(allocated.previewUrl, '/', 10_000)
+          devServerReachable = r.ok
+          devServerStatus = r.status
+          devServerError = (r as any).error
+
+          const b = await pingPreviewUrl(allocated.previewUrl, '/bundle.js', 10_000)
+          devBundleReachable = b.ok
+          devBundleStatus = b.status
+
+          if (devServerReachable && devBundleReachable) break
         }
       }
     }
@@ -207,6 +312,16 @@ export class PreviewFlowService {
       jobId,
       previewUrl: allocated.previewUrl,
       projectDir,
+      devServerReachable,
+      devServerStatus,
+      devServerError,
+      devBundleReachable,
+      devBundleStatus,
+      localDevServerReachable,
+      localDevServerStatus,
+      localDevServerError,
+      localDevBundleReachable,
+      localDevBundleStatus,
     }
   }
 }

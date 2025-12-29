@@ -44,6 +44,9 @@ const envSchema = z.object({
   WORKSPACES_ROOT: z.string().default('/home/user/workspaces'),
   PROJECT_NAME: z.string().default('remotion-project'),
   BASE_PROJECT_DIR: z.string().default('/app'),
+
+  // 本地调试：把 scenes 写入服务器本机模板工程目录（用于 admin-local /api/local/push）
+  LOCAL_PROJECT_DIR: z.string().min(1).optional(),
 })
 
 
