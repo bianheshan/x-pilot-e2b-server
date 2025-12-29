@@ -5,28 +5,40 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 
 import { env } from '../config/env.js'
-import { buildFromDifyScenes } from '../services/dify/dify-scenes.js'
+import { buildFromDifyBundle, buildFromDifyScenes } from '../services/dify/dify-scenes.js'
 
 const sceneSchema = z.object({
   filePath: z.string().min(1),
   code: z.string(),
 })
 
-export const localPushRequestSchema = z.object({
-  // 服务器本机路径：支持两种写法
-  // 1) 模板工程根目录（例如 C:\\Users\\bianh\\x-pilot-video-render）
-  // 2) 直接指定 scenes 目录（例如 C:\\Users\\bianh\\x-pilot-video-render\\src\\scenes）
-  // 不填则使用 env.LOCAL_PROJECT_DIR（再不填则用 env.BASE_PROJECT_DIR）。
-  projectDir: z.string().min(1).optional(),
-
-  // dify 模式下是否先清空 src/scenes/*.tsx + manifest.json
-  clearScenes: z.boolean().optional().default(true),
-
-  // 支持两种输入：
-  // 1) Dify 直接输出的 scenes: string[]（场景代码数组）
-  // 2) 直接写文件的 scenes: {filePath, code}[]
-  scenes: z.array(z.union([sceneSchema, z.string().min(1)])).min(1),
+const difyBundleSchema = z.object({
+  json_string: z.string().min(1),
+  code_array: z.array(z.string().min(1)).min(1),
 })
+
+export const localPushRequestSchema = z
+  .object({
+    // 服务器本机路径：支持两种写法
+    // 1) 模板工程根目录（例如 C:\\Users\\bianh\\x-pilot-video-render）
+    // 2) 直接指定 scenes 目录（例如 C:\\Users\\bianh\\x-pilot-video-render\\src\\scenes）
+    // 不填则使用 env.LOCAL_PROJECT_DIR（再不填则用 env.BASE_PROJECT_DIR）。
+    projectDir: z.string().min(1).optional(),
+
+    // dify 模式下是否先清空 src/scenes/*.tsx + manifest.json
+    clearScenes: z.boolean().optional().default(true),
+
+    // 支持两种输入：
+    // 1) Dify bundle：{ json_string, code_array }
+    // 2) Dify 直接输出的 scenes: string[]（场景代码数组）
+    // 3) 直接写文件的 scenes: {filePath, code}[]
+    dify: difyBundleSchema.optional(),
+    scenes: z.array(z.union([sceneSchema, z.string().min(1)])).min(1).optional(),
+  })
+  .refine((v) => Boolean(v.dify) || (Array.isArray(v.scenes) && v.scenes.length > 0), {
+    message: '必须提供 dify 或 scenes',
+  })
+
 
 function sanitizeRelativePosixPath(input: string): string {
   const p = input.replace(/\\/g, '/').replace(/^\/\/+/, '')
@@ -94,26 +106,43 @@ export async function localPushRoutes(app: FastifyInstance) {
     const scenesDir = detected.scenesDir
     const baseIsScenesDir = detected.baseIsScenesDir
 
-    const scenes = body.scenes as Array<{ filePath: string; code: string } | string>
-    const isDify = typeof scenes[0] === 'string'
-    if (isDify && !scenes.every((s) => typeof s === 'string')) {
-      throw new Error('scenes 输入必须是纯 string[]（Dify）或纯 {filePath,code}[]（文件写入）')
-    }
-    if (!isDify && !scenes.every((s) => typeof s === 'object' && s !== null)) {
-      throw new Error('scenes 输入必须是纯 string[]（Dify）或纯 {filePath,code}[]（文件写入）')
-    }
+    let mode: 'dify' | 'files'
+    let cleared = false
+    let fileWritesRaw: Array<{ filePath: string; code: string }>
 
-    const fileWritesRaw = isDify
-      ? buildFromDifyScenes({ scenes: scenes as string[] }).files
-      : (scenes as Array<{ filePath: string; code: string }>)
+    if (body.dify) {
+      mode = 'dify'
+      fileWritesRaw = buildFromDifyBundle(body.dify).files
 
+      if (body.clearScenes) {
+        await clearScenesInDir(scenesDir)
+        cleared = true
+      }
+    } else {
+      const scenes = body.scenes as Array<{ filePath: string; code: string } | string>
+      const isDify = typeof scenes[0] === 'string'
+
+      if (isDify && !scenes.every((s) => typeof s === 'string')) {
+        throw new Error('scenes 输入必须是纯 string[]（Dify）或纯 {filePath,code}[]（文件写入）')
+      }
+      if (!isDify && !scenes.every((s) => typeof s === 'object' && s !== null)) {
+        throw new Error('scenes 输入必须是纯 string[]（Dify）或纯 {filePath,code}[]（文件写入）')
+      }
+
+      mode = isDify ? 'dify' : 'files'
+
+      fileWritesRaw = isDify
+        ? buildFromDifyScenes({ scenes: scenes as string[] }).files
+        : (scenes as Array<{ filePath: string; code: string }>)
+
+      if (isDify && body.clearScenes) {
+        await clearScenesInDir(scenesDir)
+        cleared = true
+      }
+    }
 
     const fileWrites = fileWritesRaw.map((f) => ({ ...f, code: maybeUnescapeCode(f.code) }))
 
-
-    if (isDify && body.clearScenes) {
-      await clearScenesInDir(scenesDir)
-    }
 
     const written: string[] = []
 
@@ -152,8 +181,9 @@ export async function localPushRoutes(app: FastifyInstance) {
       projectDir,
       scenesDir,
       baseIsScenesDir,
-      mode: isDify ? 'dify' : 'files',
-      cleared: Boolean(isDify && body.clearScenes),
+      mode,
+      cleared,
+
       writtenCount: written.length,
       writtenFiles: written,
     })

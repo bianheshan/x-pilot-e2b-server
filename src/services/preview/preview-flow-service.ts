@@ -1,7 +1,8 @@
 import { z } from 'zod'
 
 import { env } from '../../config/env.js'
-import { buildFromDifyScenes } from '../dify/dify-scenes.js'
+import { buildFromDifyBundle, buildFromDifyScenes } from '../dify/dify-scenes.js'
+
 import { SandboxService } from '../sandbox/sandbox-service.js'
 
 const sceneSchema = z.object({
@@ -11,22 +12,34 @@ const sceneSchema = z.object({
 
 const difySceneSchema = z.string().min(1)
 
-export const previewRequestSchema = z.object({
-  userId: z.string().min(1).optional(),
-  jobId: z.string().min(1).optional(),
-  templateId: z.string().min(1).optional(),
-  templateName: z.string().min(1).optional(),
-
-  // 支持两种输入：
-  // 1) Dify 直接输出的 scenes: string[]（场景代码数组）
-  // 2) 直接写文件的 scenes: {filePath, code}[]
-  scenes: z.array(z.union([sceneSchema, difySceneSchema])).min(1),
-
-  startDev: z.boolean().optional().default(true),
-  // 为了避免前端请求挂太久（或被网关/浏览器中途取消），默认不等待 ready。
-  // 前端拿到 previewUrl 后自行打开即可。
-  waitForReady: z.boolean().optional().default(false),
+const difyBundleSchema = z.object({
+  json_string: z.string().min(1),
+  code_array: z.array(z.string().min(1)).min(1),
 })
+
+export const previewRequestSchema = z
+  .object({
+    userId: z.string().min(1).optional(),
+    jobId: z.string().min(1).optional(),
+    templateId: z.string().min(1).optional(),
+    templateName: z.string().min(1).optional(),
+
+    // 支持三种输入：
+    // 1) Dify bundle：{ json_string, code_array }
+    // 2) Dify 直接输出的 scenes: string[]（场景代码数组）
+    // 3) 直接写文件的 scenes: {filePath, code}[]
+    dify: difyBundleSchema.optional(),
+    scenes: z.array(z.union([sceneSchema, difySceneSchema])).min(1).optional(),
+
+    startDev: z.boolean().optional().default(true),
+    // 为了避免前端请求挂太久（或被网关/浏览器中途取消），默认不等待 ready。
+    // 前端拿到 previewUrl 后自行打开即可。
+    waitForReady: z.boolean().optional().default(false),
+  })
+  .refine((v) => Boolean(v.dify) || (Array.isArray(v.scenes) && v.scenes.length > 0), {
+    message: '必须提供 dify 或 scenes',
+  })
+
 
 export type PreviewRequest = z.infer<typeof previewRequestSchema>
 
@@ -144,29 +157,40 @@ export class PreviewFlowService {
       { attempts: 5, baseDelayMs: 800 },
     )
 
-    const scenes = req.scenes as Array<{ filePath: string; code: string } | string>
+    let mode: 'dify' | 'files'
+    let fileWrites: Array<{ filePath: string; code: string }>
 
-    const isDify = typeof scenes[0] === 'string'
-    if (isDify && !scenes.every((s) => typeof s === 'string')) {
-      throw new Error('scenes 输入必须是纯 string[]（Dify）或纯 {filePath,code}[]（文件写入）')
-    }
-    if (!isDify && !scenes.every((s) => typeof s === 'object' && s !== null)) {
-      throw new Error('scenes 输入必须是纯 string[]（Dify）或纯 {filePath,code}[]（文件写入）')
-    }
+    if (req.dify) {
+      mode = 'dify'
+      fileWrites = buildFromDifyBundle(req.dify).files
+    } else {
+      const scenes = req.scenes as Array<{ filePath: string; code: string } | string>
 
-    const fileWrites = isDify
-      ? buildFromDifyScenes({ scenes: scenes as string[] }).files
-      : (scenes as Array<{ filePath: string; code: string }>)
+      const isDify = typeof scenes[0] === 'string'
+      if (isDify && !scenes.every((s) => typeof s === 'string')) {
+        throw new Error('scenes 输入必须是纯 string[]（Dify）或纯 {filePath,code}[]（文件写入）')
+      }
+      if (!isDify && !scenes.every((s) => typeof s === 'object' && s !== null)) {
+        throw new Error('scenes 输入必须是纯 string[]（Dify）或纯 {filePath,code}[]（文件写入）')
+      }
+
+      mode = isDify ? 'dify' : 'files'
+
+      fileWrites = isDify
+        ? buildFromDifyScenes({ scenes: scenes as string[] }).files
+        : (scenes as Array<{ filePath: string; code: string }>)
+    }
 
     // Dify 场景模式：按你的需求，先清空模板自带的场景，再写入新场景 + manifest。
     // 这样 Remotion Studio 里不会混入模板默认场景。
-    if (isDify) {
+    if (mode === 'dify') {
       try {
         await s.commands.run('rm -f src/scenes/*.tsx src/scenes/manifest.json', { cwd: projectDir })
       } catch {
         // ignore
       }
     }
+
 
     const dirs = new Set<string>()
     const writes = fileWrites.map((scene) => {

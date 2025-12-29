@@ -269,9 +269,19 @@ const html = String.raw`<!doctype html>
       throw new Error('JSON 解析失败：' + (e && e.message ? e.message : String(e)))
     }
 
+    // Dify bundle：保留 json_string + code_array，让服务端生成正确的 manifest（duration/name/id）
+    if (parsed && typeof parsed === 'object' && typeof parsed.json_string === 'string' && Array.isArray(parsed.code_array)) {
+      const json_string = stripOuterMarkdownFence(parsed.json_string).trim()
+      const code_array = parsed.code_array.map((s) => normalizeSceneCode(s)).filter(Boolean)
+      if (!json_string) throw new Error('json_string 为空')
+      if (code_array.length === 0) throw new Error('code_array 为空')
+      return { dify: { json_string, code_array } }
+    }
+
     let scenes = parsed
 
     let parsedFromJsonString = null
+
     if (parsed && typeof parsed === 'object' && typeof parsed.json_string === 'string') {
       try {
         const inner = stripOuterMarkdownFence(parsed.json_string)
@@ -332,14 +342,27 @@ const html = String.raw`<!doctype html>
   }
 
   function buildPayload() {
-    const scenes = parseScenes(els.scenes.value)
+    const input = parseScenes(els.scenes.value)
     const projectDir = (els.projectDir.value || '').trim()
-    return {
+
+    const payload = {
       projectDir: projectDir || undefined,
       clearScenes: els.clearScenes.value === 'true',
-      scenes,
     }
+
+    if (Array.isArray(input)) {
+      payload.scenes = input
+      return payload
+    }
+
+    if (input && typeof input === 'object' && input.dify) {
+      payload.dify = input.dify
+      return payload
+    }
+
+    throw new Error('输入解析失败：未知格式')
   }
+
 
   function renderCurl(payload) {
     const base = getTargetBase()

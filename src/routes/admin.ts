@@ -419,9 +419,20 @@ const html = String.raw`<!doctype html>
     // 3) [{filePath, code}, ...]
     // 4) { json_string: "...", code_array: string[] }（你的 Dify 输出）
     // 5) { json_string: "..." }（json_string 自身就是一个可解析的 JSON，且内部包含 scenes / code_array）
+
+    // Dify bundle：保留 json_string + code_array，让服务端生成正确的 manifest（duration/name/id）
+    if (parsed && typeof parsed === 'object' && typeof parsed.json_string === 'string' && Array.isArray(parsed.code_array)) {
+      const json_string = stripOuterMarkdownFence(parsed.json_string).trim()
+      const code_array = parsed.code_array.map((s) => normalizeSceneCode(s)).filter(Boolean)
+      if (!json_string) throw new Error('json_string 为空')
+      if (code_array.length === 0) throw new Error('code_array 为空')
+      return { dify: { json_string, code_array } }
+    }
+
     let scenes = parsed
 
     let parsedFromJsonString = null
+
     if (parsed && typeof parsed === 'object' && typeof parsed.json_string === 'string') {
       try {
         const inner = stripOuterMarkdownFence(parsed.json_string)
@@ -474,17 +485,30 @@ const html = String.raw`<!doctype html>
   }
 
   function buildPayload() {
-    const scenes = parseScenes(els.scenes.value)
-    return {
+    const input = parseScenes(els.scenes.value)
+
+    const payload = {
       userId: els.token.value.trim() || els.userId.value.trim() || undefined,
       jobId: els.jobId.value.trim() || undefined,
       templateName: els.templateName.value.trim() || undefined,
       templateId: els.templateId.value.trim() || undefined,
-      scenes,
       startDev: els.startDev.value === 'true',
       waitForReady: els.waitForReady.value === 'true',
     }
+
+    if (Array.isArray(input)) {
+      payload.scenes = input
+      return payload
+    }
+
+    if (input && typeof input === 'object' && input.dify) {
+      payload.dify = input.dify
+      return payload
+    }
+
+    throw new Error('输入解析失败：未知格式')
   }
+
 
   function escapeBashSingleQuotes(s) {
     return String(s).replace(/'/g, "'\"'\"'")

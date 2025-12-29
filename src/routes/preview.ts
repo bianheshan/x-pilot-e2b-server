@@ -25,7 +25,7 @@ export async function previewRoutes(app: FastifyInstance) {
           reqId,
           startDev: body.startDev,
           waitForReady: body.waitForReady,
-          scenesCount: Array.isArray(body.scenes) ? body.scenes.length : 0,
+          scenesCount: body.dify?.code_array?.length ?? (Array.isArray(body.scenes) ? body.scenes.length : 0),
         },
         'preview: parsed body',
       )
